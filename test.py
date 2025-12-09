@@ -275,7 +275,7 @@ def _(mo):
     )
 
 
-# === ЯЧЕЙКА 4: предсказание двумя моделями и вывод в два столбца ===
+# === ЯЧЕЙКА 4: предсказание двумя моделями, график и вывод в два столбца ===
 @app.cell
 def _(
     mo,
@@ -293,6 +293,8 @@ def _(
     display_size_in,
     release_year,
 ):
+    import matplotlib.pyplot as plt
+
     # Формируем одну строку-пример
     row = {
         "device_type": device_type.value,
@@ -347,6 +349,7 @@ def _(
     price_rf = float(model_rf.predict(df_row)[0])
     price_lr = float(model_lr.predict(df_row)[0])
 
+    # --- «Карточки» с числами ---
     card_rf = mo.vstack(
         [
             mo.md("### Random Forest"),
@@ -373,6 +376,39 @@ def _(
         align="start",
     )
 
+    # --- Мини-график: сравнение предсказаний моделей ---
+    fig, ax = plt.subplots(figsize=(4.5, 3))
+
+    labels = ["Random Forest", "Linear Regression"]
+    values = [price_rf, price_lr]
+
+    bars = ax.bar(labels, values)
+
+    # Убираем лишние рамки
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+
+    ax.set_ylabel("Предсказанная цена, $")
+    ax.set_title("Сравнение предсказаний моделей", pad=8)
+
+    # Лёгкая сетка по Y
+    ax.grid(axis="y", linestyle="--", alpha=0.3)
+
+    # Подписи над столбцами
+    for bar in bars:
+        height = bar.get_height()
+        ax.text(
+            bar.get_x() + bar.get_width() / 2,
+            height,
+            f"{height:,.0f}",
+            ha="center",
+            va="bottom",
+            fontsize=9,
+        )
+
+    fig.tight_layout()
+
+    # --- Детали конфигурации ---
     details = mo.md(
         f"""
 **Конфигурация:**
@@ -393,6 +429,9 @@ def _(
         [
             mo.md("## Прогноз цены (две модели)"),
             mo.hstack([card_rf, card_lr], align="start", justify="space-between"),
+            mo.md("### Визуальное сравнение"),
+            # здесь центрируем график
+            mo.hstack([fig], justify="center"),
             mo.md("---"),
             details,
         ]
