@@ -3,17 +3,77 @@ import marimo
 __generated_with = "0.17.7"
 app = marimo.App(width="medium")
 
-with app.setup:
-    # Тут пока просто заглушка, потом сюда можно будет засунуть загрузку датасета/модели
-    import numpy as np
-    import matplotlib.pyplot as plt
+@app.cell
+def _():
+    import os
+    import pandas as pd
+    from sklearn.preprocessing import OneHotEncoder
+    from sklearn.compose import ColumnTransformer
+    from sklearn.pipeline import Pipeline
+    from sklearn.ensemble import RandomForestRegressor
+    from joblib import dump, load  # joblib идёт вместе с sklearn
 
-    def plot(x, y, figsize=(3, 3), lw=2):
-        fig = plt.figure(figsize=figsize)
-        for xx, yy in zip(x, y):
-            plt.plot(xx, yy, lw=lw)
-        return fig
+    MODEL_PATH = "pc_price_model.joblib"
+    META_PATH = "pc_price_model_meta.joblib"
 
+    # Если модель уже сохранена — просто грузим её
+    if os.path.exists(MODEL_PATH) and os.path.exists(META_PATH):
+        model = load(MODEL_PATH)
+        meta = load(META_PATH)
+        X_columns = meta["X_columns"]
+        cat_cols = meta["cat_cols"]
+        num_cols = meta["num_cols"]
+        print(">> Модель загружена из файла")
+    else:
+        print(">> Файл модели не найден, обучаем с нуля...")
+
+        df = pd.read_csv("computer_prices_clean.csv")
+
+        y = df["price"]
+        X = df.drop(columns=["price"])
+
+        cat_cols = [
+            "device_type", "brand", "model", "os", "form_factor",
+            "cpu_brand", "cpu_model", "gpu_brand", "gpu_model",
+            "storage_type", "display_type", "resolution",
+            "wifi", "bluetooth",
+        ]
+
+        num_cols = [c for c in X.columns if c not in cat_cols]
+
+        preprocess = ColumnTransformer(
+            transformers=[
+                ("cat", OneHotEncoder(handle_unknown="ignore"), cat_cols),
+                ("num", "passthrough", num_cols),
+            ]
+        )
+
+        model = Pipeline(
+            steps=[
+                ("preprocess", preprocess),
+                ("rf", RandomForestRegressor(
+                    n_estimators=10,   # минимально, чтобы быстро
+                    max_depth=6,
+                    random_state=42,
+                    n_jobs=-1,
+                )),
+            ]
+        )
+
+        model.fit(X, y)
+        X_columns = X.columns.tolist()
+
+        meta = {
+            "X_columns": X_columns,
+            "cat_cols": cat_cols,
+            "num_cols": num_cols,
+        }
+
+        dump(model, MODEL_PATH)
+        dump(meta, META_PATH)
+        print(">> Модель обучена и сохранена в файл")
+
+    return model, X_columns, cat_cols, num_cols
 
 @app.cell
 def _():
@@ -170,6 +230,8 @@ def _(mo):
 @app.cell
 def _(
     mo,
+    model,
+    X_columns,
     device_type,
     brand,
     form_factor,
@@ -181,102 +243,86 @@ def _(
     display_size_in,
     release_year,
 ):
-    # базовая цена
-    price = 500.0
+    # Формируем один объект для модели
+    row = {
+        "device_type": device_type.value,
+        "brand": brand.value,
+        "model": "CustomUserBuild",   # фиктивно
+        "os": "Windows",              # можно добавить в UI потом
+        "form_factor": form_factor.value,
+        "cpu_brand": "Intel",         # фиктивно
+        "cpu_model": f"Tier{cpu_tier.value}",
+        "cpu_tier": cpu_tier.value,
+        "cpu_cores": 8,               # фиктивно
+        "cpu_threads": 16,            # фиктивно
+        "cpu_base_ghz": 2.5,          # фиктивно
+        "cpu_boost_ghz": 3.5,         # фиктивно
 
-    # device_type: ноут обычно дороже
-    if device_type.value == "Laptop":
-        price += 250
+        "gpu_brand": "NVIDIA",
+        "gpu_model": f"Tier{gpu_tier.value}",
+        "gpu_tier": gpu_tier.value,
+        "vram_gb": 8,
 
-    # CPU tier: сильное влияние
-    price += (cpu_tier.value - 1) * 180
+        "ram_gb": ram_gb.value,
 
-    # GPU tier: ещё сильнее влияет для игровых / рабочих станций
-    gpu_multiplier = 220
-    if form_factor.value in ("Gaming", "Workstation"):
-        gpu_multiplier = 260
-    price += (gpu_tier.value - 1) * gpu_multiplier
+        "storage_type": storage_type.value,
+        "storage_gb": storage_gb.value,
+        "storage_drive_count": 1,
 
-    # RAM: до 32 растём сильно, дальше слабее
-    if ram_gb.value <= 32:
-        price += (ram_gb.value - 8) * 5
-    else:
-        price += (32 - 8) * 5 + (ram_gb.value - 32) * 2
+        "display_type": "LED",
+        "display_size_in": display_size_in.value,
+        "resolution": "1920x1080",
+        "refresh_hz": 60,
 
-    # Storage size: линейный вклад
-    price += (storage_gb.value - 256) * 0.1
+        "battery_wh": 50,
+        "charger_watts": 100,
+        "psu_watts": 650,
+        "wifi": "Wi-Fi 6",
+        "bluetooth": "5.2",
+        "weight_kg": 2.0,
+        "warranty_months": 24,
 
-    # Storage type: HDD < SSD < NVMe < Hybrid (условно)
-    if storage_type.value == "HDD":
-        price += 0
-    elif storage_type.value == "SSD":
-        price += 80
-    elif storage_type.value == "NVMe":
-        price += 150
-    elif storage_type.value == "Hybrid":
-        price += 120
+        "release_year": release_year.value,
+    }
 
-    # Display size: больше экран — дороже
-    price += (display_size_in.value - 13) * 15
+    # Приводим к DataFrame с правильными колонками
+    df_row = pd.DataFrame([row])
+    for col in X_columns:
+        if col not in df_row.columns:
+            df_row[col] = 0
 
-    # Release year: свежее — дороже, но старым делаем скидку
-    age = 2025 - release_year.value
-    if age <= 1:
-        price += 200
-    elif age <= 3:
-        price += 100
-    else:
-        price -= age * 50  # старым снижаем цену
+    df_row = df_row[X_columns]
 
-    # Бренд: Apple / Razer — премиум
-    if brand.value == "Apple":
-        price *= 1.25
-    elif brand.value == "Razer":
-        price *= 1.15
-    elif brand.value in ("MSI", "Samsung"):
-        price *= 1.05
-
-    # Форм-фактор: Gaming / Workstation чуть дороже
-    if form_factor.value == "Gaming":
-        price += 200
-    elif form_factor.value == "Workstation":
-        price += 300
-
-    # Минимальная защита от отрицательной цены
-    price = max(price, 300)
+    # Прогноз цены
+    price = model.predict(df_row)[0]
 
     summary = mo.vstack(
         [
-            mo.md("## Итоговая оценка конфигурации"),
+            mo.md("## Прогноз цены (ML модель)"),
             mo.md(
                 f"<div style='font-size: 2rem; font-weight: 700;'>"
-                f"~ {price:,.2f} у.е."
+                f"~ {price:,.2f} $"
                 f"</div>"
             ),
-            mo.md(
-                """
----
-
-### Краткое резюме конфигурации
-"""
-            ),
+            mo.md("### Параметры конфигурации (коротко):"),
             mo.md(
                 f"""
-- **Тип устройства:** {device_type.value}  
-- **Бренд:** {brand.value}  
-- **Форм-фактор:** {form_factor.value}  
-- **CPU tier:** {cpu_tier.value}  
-- **GPU tier:** {gpu_tier.value}  
-- **RAM:** {ram_gb.value} GB  
-- **Накопитель:** {storage_gb.value} GB {storage_type.value}  
-- **Диагональ:** {display_size_in.value}"  
-- **Год выпуска:** {release_year.value}  
+- Тип: **{device_type.value}**  
+- Бренд: **{brand.value}**  
+- Форм-фактор: **{form_factor.value}**  
+- CPU tier: **{cpu_tier.value}**  
+- GPU tier: **{gpu_tier.value}**  
+- RAM: **{ram_gb.value} GB**  
+- Накопитель: **{storage_gb.value} GB ({storage_type.value})**  
+- Диагональ: **{display_size_in.value}"**  
+- Год выпуска: **{release_year.value}**  
 """
             ),
         ]
     )
 
     summary
+
 
 
 if __name__ == "__main__":
