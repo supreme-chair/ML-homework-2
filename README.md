@@ -9,6 +9,9 @@
 ## About the Project
 The goal of the project is to develop an interactive dashboard for analyzing the impact of changes in categorical and numerical parameters on the prediction results of ML models using marimo. The work is carried out as part of the course *Machine Learning for Business Analytics*.
 
+## Project Demo
+[**dribnokhod.com:8888**](http://dribnokhod.com:8888)
+
 ## About the Dataset
 The project is based on **All Computer Prices**, which contains technical parameters and retail prices of computers. Errors related to incorrect operating system specifications for Apple devices (OS: Windows → macOS) have been corrected in the dataset.
 
