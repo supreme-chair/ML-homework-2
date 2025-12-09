@@ -4,16 +4,20 @@ __generated_with = "0.17.7"
 app = marimo.App(width="medium")
 
 
-# === ЯЧЕЙКА 0: обучение / загрузка моделей (RF + LR) ===
+
+
 @app.cell
 def _():
     import os
     import pandas as pd
+    from math import sqrt
     from sklearn.preprocessing import OneHotEncoder
     from sklearn.compose import ColumnTransformer
     from sklearn.pipeline import Pipeline
     from sklearn.ensemble import RandomForestRegressor
     from sklearn.linear_model import LinearRegression
+    from sklearn.model_selection import train_test_split
+    from sklearn.metrics import mean_absolute_error, mean_squared_error
     from joblib import dump, load
 
     RF_PATH = "pc_price_model_rf.joblib"
@@ -57,13 +61,13 @@ def _():
             ]
         )
 
-        # Минимальные параметры для скорости
+        # Пайплайны моделей
         model_rf = Pipeline(
             steps=[
                 ("preprocess", preprocess),
                 ("rf", RandomForestRegressor(
-                    n_estimators=10,
-                    max_depth=6,
+                    n_estimators=20,
+                    max_depth=17,
                     random_state=42,
                     n_jobs=-1,
                 )),
@@ -76,20 +80,48 @@ def _():
             ]
         )
 
-        # Обучаем обе
+        # train / test для метрик
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=0.2, random_state=42
+        )
+
+        # Обучаем обе на train
+        model_rf.fit(X_train, y_train)
+        model_lr.fit(X_train, y_train)
+
+        # Метрики на test
+        y_pred_rf = model_rf.predict(X_test)
+        y_pred_lr = model_lr.predict(X_test)
+
+        mae_rf = mean_absolute_error(y_test, y_pred_rf)
+        mse_rf = mean_squared_error(y_test, y_pred_rf)
+        rmse_rf = sqrt(mse_rf)
+
+        mae_lr = mean_absolute_error(y_test, y_pred_lr)
+        mse_lr = mean_squared_error(y_test, y_pred_lr)
+        rmse_lr = sqrt(mse_lr)
+
+        print(f">> RandomForest  MAE: {mae_rf:.2f}, RMSE: {rmse_rf:.2f}")
+        print(f">> LinearRegress MAE: {mae_lr:.2f}, RMSE: {rmse_lr:.2f}")
+
+        # После оценки можно дообучить на всём датасете
         model_rf.fit(X, y)
         model_lr.fit(X, y)
+
         X_columns = X.columns.tolist()
 
         # Сохраняем
-        meta = {"X_columns": X_columns, "cat_cols": cat_cols, "num_cols": num_cols}
+        meta = {
+            "X_columns": X_columns,
+            "cat_cols": cat_cols,
+            "num_cols": num_cols,
+        }
         dump(model_rf, RF_PATH)
         dump(model_lr, LR_PATH)
         dump(meta, META_PATH)
-        print(">> Обе модели обучены и сохранены в файлы")
+        print(">> Обе модели обучены на всём датасете и сохранены в файлы")
 
     return model_rf, model_lr, X_columns, cat_cols, num_cols
-
 
 # === ЯЧЕЙКА 1: marimo alias ===
 @app.cell
