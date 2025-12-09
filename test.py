@@ -3,6 +3,8 @@ import marimo
 __generated_with = "0.17.7"
 app = marimo.App(width="medium")
 
+
+# === ЯЧЕЙКА 0: обучение / загрузка моделей (RF + LR) ===
 @app.cell
 def _():
     import os
@@ -11,24 +13,32 @@ def _():
     from sklearn.compose import ColumnTransformer
     from sklearn.pipeline import Pipeline
     from sklearn.ensemble import RandomForestRegressor
-    from joblib import dump, load  # joblib идёт вместе с sklearn
+    from sklearn.linear_model import LinearRegression
+    from joblib import dump, load
 
-    MODEL_PATH = "pc_price_model.joblib"
+    RF_PATH = "pc_price_model_rf.joblib"
+    LR_PATH = "pc_price_model_lr.joblib"
     META_PATH = "pc_price_model_meta.joblib"
 
-    # Если модель уже сохранена — просто грузим её
-    if os.path.exists(MODEL_PATH) and os.path.exists(META_PATH):
-        model = load(MODEL_PATH)
+    model_rf = None
+    model_lr = None
+    X_columns = None
+    cat_cols = None
+    num_cols = None
+
+    # Если всё уже сохранено — грузим
+    if os.path.exists(RF_PATH) and os.path.exists(LR_PATH) and os.path.exists(META_PATH):
+        model_rf = load(RF_PATH)
+        model_lr = load(LR_PATH)
         meta = load(META_PATH)
         X_columns = meta["X_columns"]
         cat_cols = meta["cat_cols"]
         num_cols = meta["num_cols"]
-        print(">> Модель загружена из файла")
+        print(">> Модели RF и LR загружены из файлов")
     else:
-        print(">> Файл модели не найден, обучаем с нуля...")
+        print(">> Файлы моделей не найдены, обучаем с нуля...")
 
         df = pd.read_csv("computer_prices_clean.csv")
-
         y = df["price"]
         X = df.drop(columns=["price"])
 
@@ -38,7 +48,6 @@ def _():
             "storage_type", "display_type", "resolution",
             "wifi", "bluetooth",
         ]
-
         num_cols = [c for c in X.columns if c not in cat_cols]
 
         preprocess = ColumnTransformer(
@@ -48,40 +57,48 @@ def _():
             ]
         )
 
-        model = Pipeline(
+        # Минимальные параметры для скорости
+        model_rf = Pipeline(
             steps=[
                 ("preprocess", preprocess),
                 ("rf", RandomForestRegressor(
-                    n_estimators=10,   # минимально, чтобы быстро
+                    n_estimators=10,
                     max_depth=6,
                     random_state=42,
                     n_jobs=-1,
                 )),
             ]
         )
+        model_lr = Pipeline(
+            steps=[
+                ("preprocess", preprocess),
+                ("lr", LinearRegression())
+            ]
+        )
 
-        model.fit(X, y)
+        # Обучаем обе
+        model_rf.fit(X, y)
+        model_lr.fit(X, y)
         X_columns = X.columns.tolist()
 
-        meta = {
-            "X_columns": X_columns,
-            "cat_cols": cat_cols,
-            "num_cols": num_cols,
-        }
-
-        dump(model, MODEL_PATH)
+        # Сохраняем
+        meta = {"X_columns": X_columns, "cat_cols": cat_cols, "num_cols": num_cols}
+        dump(model_rf, RF_PATH)
+        dump(model_lr, LR_PATH)
         dump(meta, META_PATH)
-        print(">> Модель обучена и сохранена в файл")
+        print(">> Обе модели обучены и сохранены в файлы")
 
-    return model, X_columns, cat_cols, num_cols
+    return model_rf, model_lr, X_columns, cat_cols, num_cols
 
+
+# === ЯЧЕЙКА 1: marimo alias ===
 @app.cell
 def _():
     import marimo as mo
     return mo
 
 
-# ШАПКА
+# === ЯЧЕЙКА 2: шапка ===
 @app.cell
 def _(mo):
     header = mo.vstack(
@@ -97,7 +114,7 @@ def _(mo):
     return header
 
 
-# ЯЧЕЙКА 1: только UI, никаких .value
+# === ЯЧЕЙКА 3: UI с параметрами конфигурации ===
 @app.cell
 def _(mo):
     # Категориальные
@@ -226,11 +243,12 @@ def _(mo):
     )
 
 
-# ЯЧЕЙКА 2: читаем .value и считаем "цену"
+# === ЯЧЕЙКА 4: предсказание двумя моделями и вывод в два столбца ===
 @app.cell
 def _(
     mo,
-    model,
+    model_rf,
+    model_lr,
     X_columns,
     device_type,
     brand,
@@ -243,20 +261,21 @@ def _(
     display_size_in,
     release_year,
 ):
-    # Формируем один объект для модели
+    # Формируем одну строку-пример
     row = {
         "device_type": device_type.value,
         "brand": brand.value,
-        "model": "CustomUserBuild",   # фиктивно
-        "os": "Windows",              # можно добавить в UI потом
+        "model": "CustomUserBuild",
+        "os": "Windows",
         "form_factor": form_factor.value,
-        "cpu_brand": "Intel",         # фиктивно
+
+        "cpu_brand": "Intel",
         "cpu_model": f"Tier{cpu_tier.value}",
         "cpu_tier": cpu_tier.value,
-        "cpu_cores": 8,               # фиктивно
-        "cpu_threads": 16,            # фиктивно
-        "cpu_base_ghz": 2.5,          # фиктивно
-        "cpu_boost_ghz": 3.5,         # фиктивно
+        "cpu_cores": 8,
+        "cpu_threads": 16,
+        "cpu_base_ghz": 2.5,
+        "cpu_boost_ghz": 3.5,
 
         "gpu_brand": "NVIDIA",
         "gpu_model": f"Tier{gpu_tier.value}",
@@ -285,44 +304,69 @@ def _(
         "release_year": release_year.value,
     }
 
-    # Приводим к DataFrame с правильными колонками
     df_row = pd.DataFrame([row])
+    # Гарантируем полный набор и порядок колонок
     for col in X_columns:
         if col not in df_row.columns:
             df_row[col] = 0
-
     df_row = df_row[X_columns]
 
-    # Прогноз цены
-    price = model.predict(df_row)[0]
+    # Прогнозы от обеих моделей
+    price_rf = float(model_rf.predict(df_row)[0])
+    price_lr = float(model_lr.predict(df_row)[0])
 
-    summary = mo.vstack(
+    card_rf = mo.vstack(
         [
-            mo.md("## Прогноз цены (ML модель)"),
+            mo.md("### Random Forest"),
             mo.md(
-                f"<div style='font-size: 2rem; font-weight: 700;'>"
-                f"~ {price:,.2f} $"
-                f"</div>"
+                f"<div style='font-size:1.6rem; font-weight:700;'>~ {price_rf:,.2f} $</div>"
             ),
-            mo.md("### Параметры конфигурации (коротко):"),
             mo.md(
-                f"""
-- Тип: **{device_type.value}**  
-- Бренд: **{brand.value}**  
-- Форм-фактор: **{form_factor.value}**  
-- CPU tier: **{cpu_tier.value}**  
-- GPU tier: **{gpu_tier.value}**  
-- RAM: **{ram_gb.value} GB**  
-- Накопитель: **{storage_gb.value} GB ({storage_type.value})**  
-- Диагональ: **{display_size_in.value}"**  
-- Год выпуска: **{release_year.value}**  
+                "_Нелинейная модель, устойчива к выбросам; хорошо ловит взаимодействия признаков._"
+            ),
+        ],
+        align="start",
+    )
+
+    card_lr = mo.vstack(
+        [
+            mo.md("### Linear Regression"),
+            mo.md(
+                f"<div style='font-size:1.6rem; font-weight:700;'>~ {price_lr:,.2f} $</div>"
+            ),
+            mo.md(
+                "_Линейная модель с понятной интерпретацией; быстрая и простая._"
+            ),
+        ],
+        align="start",
+    )
+
+    details = mo.md(
+        f"""
+**Конфигурация:**
+
+- Тип: **{device_type.value}**
+- Бренд: **{brand.value}**
+- Форм-фактор: **{form_factor.value}**
+- CPU tier: **{cpu_tier.value}**
+- GPU tier: **{gpu_tier.value}**
+- RAM: **{ram_gb.value} GB**
+- Накопитель: **{storage_gb.value} GB ({storage_type.value})**
+- Диагональ: **{display_size_in.value}"**
+- Год выпуска: **{release_year.value}**
 """
-            ),
+    )
+
+    layout = mo.vstack(
+        [
+            mo.md("## Прогноз цены (две модели)"),
+            mo.hstack([card_rf, card_lr], align="start", justify="space-between"),
+            mo.md("---"),
+            details,
         ]
     )
 
-    summary
-
+    layout
 
 
 if __name__ == "__main__":
