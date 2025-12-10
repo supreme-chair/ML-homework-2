@@ -1,6 +1,6 @@
 # ML: Homework 2
 
-## Team №
+## Team № 5
 - Дрибноход Евгений Александрович, БАСБ253  
 - Бакаленко Павел Игоревич, БАСБ253  
 - Загреков Кирилл Андреевич, БАСБ253  
@@ -23,12 +23,16 @@ Workflow:
 ## Repository Structure
 - `computer_prices_clean.csv` — final cleaned dataset.  
 - `ML_HW_1.ipynb` — code for the first homework assignment with description.  
-- `ML_HM_2.py` — code for the second homework assignment.  
-- `` — presentation of the second project.  
-- `README.md` — this file with a general project description.  
+- `ML_HM_2.py` — code for the second homework assignment.   
+- `README.md` — this file with a general project description.
+- `EDA_for_ML_HW.ipynb` — primary dataset analysis.
+
 
 ## Tools Used
-- Python (pandas, numpy, sklearn, marimo) — data analysis, hypothesis testing.  
+- PNumPy — numerical computations, fast vectorized operations, and array processing used during data preparation.
+- Pandas — loading, cleaning, and transforming the dataset; tabular data manipulation for feature engineering and exploration.
+- Scikit-learn — machine learning pipelines: one-hot encoding, preprocessing, training Random Forest and Linear Regression models, and computing evaluation metrics (MAE, RMSE).
+- Marimo — building an interactive dashboard with sliders and dropdowns for PC configuration, real-time model inference, and clear visualization of predicted prices.
 
 ## Outcome
 The project demonstrates the full cycle of analytical work: data processing, data analysis, prediction of target metrics, and visualization of results in a dashboard. The developed dashboard allows for interactive data exploration, revealing changes in predicted device prices depending on changes in technical parameters.
