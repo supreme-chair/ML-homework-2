@@ -1,10 +1,10 @@
 # ML: Homework 2
 
 ## Team №
-- Дрибноход Евгений Александрович, БАСБ251  
-- Бакаленко Павел Игоревич, БАСБ251  
-- Загреков Кирилл Андреевич, БАСБ251  
-- Ворожцов Пётр Алексеевич, БАСБ252  
+- Дрибноход Евгений Александрович, БАСБ253  
+- Бакаленко Павел Игоревич, БАСБ253  
+- Загреков Кирилл Андреевич, БАСБ253  
+- Ворожцов Пётр Алексеевич, БАСБ253  
 
 ## About the Project
 The goal of the project is to develop an interactive dashboard for analyzing the impact of changes in categorical and numerical parameters on the prediction results of ML models using marimo. The work is carried out as part of the course *Machine Learning for Business Analytics*.
