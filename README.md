@@ -23,7 +23,7 @@ Workflow:
 ## Repository Structure
 - `computer_prices_clean.csv` — final cleaned dataset.  
 - `ML_HW_1.ipynb` — code for the first homework assignment with description.  
-- `ML_HM_2.py` — code for the second homework assignment.   
+- `ML_HW_2.py` — code for the second homework assignment.   
 - `README.md` — this file with a general project description.
 - `EDA_for_ML_HW.ipynb` — primary dataset analysis.
 
